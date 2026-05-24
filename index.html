@@ -367,8 +367,8 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 <script>
 // ─── COLOURS ──────────────────────────────────────────────────
 const C = {
-  teal:'#138a8a', coral:'#d45f48', gold:'#c39021',
-  moss:'#647a34', violet:'#7c5cbf', ink:'#202722',
+  teal:'#0ca678', coral:'#e03131', gold:'#f59f00',
+  moss:'#2b8a3e', violet:'#748ffc', ink:'#202722',
   muted:'#5f6b62', line:'rgba(32,39,34,0.16)', bg:'#f6f8f4'
 };
 
@@ -398,7 +398,7 @@ const ST = {
   friction:{ Fapp:0, mu_s:0.4, mu_k:0.25, m:3, moving:false, x:0, v:0 },
   fbd:     { Fh:30, Fv:0, m:3, floor:true },
   atwood:  { m1:1, m2:2, y1:0, y2:0, v:0, running:false },
-  incline: { theta:30, m:3, mu:0.2, bx:0, bv:0, running:false },
+  incline: { theta:30, m:1, mu:0.2, bx:0, bv:0, running:false },
 };
 
 // ─── CANVAS ───────────────────────────────────────────────────
@@ -414,26 +414,46 @@ resize();
 const PSCALE = () => Math.max(55, Math.min(W, H * 1.8) / 18);
 
 // ─── DRAW HELPERS ─────────────────────────────────────────────
-function arrow(x1,y1,x2,y2, color=C.teal, lbl='', lw=2.5){
-  const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
-  if(len<4) return;
-  const ang=Math.atan2(dy,dx), hl=Math.min(13,len*0.35), ha=0.45;
+function arrow(x1, y1, x2, y2, color=C.teal, lbl='', lw=3.5, dashed=false, flipText=false) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+  if (len < 4) return;
+  const ang = Math.atan2(dy, dx);
+  
   ctx.save();
-  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round';
+  
+  if (dashed) ctx.setLineDash([6, 4]);
+  else ctx.setLineDash([]);
+  
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  
+  ctx.setLineDash([]);
+  const hl = Math.min(14, len * 0.35), ha = 0.40;
   ctx.beginPath();
-  ctx.moveTo(x2,y2);
-  ctx.lineTo(x2-hl*Math.cos(ang-ha), y2-hl*Math.sin(ang-ha));
-  ctx.lineTo(x2-hl*Math.cos(ang+ha), y2-hl*Math.sin(ang+ha));
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hl * Math.cos(ang - ha), y2 - hl * Math.sin(ang - ha));
+  ctx.lineTo(x2 - hl * Math.cos(ang + ha), y2 - hl * Math.sin(ang + ha));
   ctx.closePath(); ctx.fill();
-  if(lbl){
-    const nx=-Math.sin(ang)*17, ny=Math.cos(ang)*17;
-    ctx.font='bold 12px Inter,sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.lineWidth=3; ctx.strokeStyle='rgba(246,248,244,0.85)';
-    ctx.strokeText(lbl,(x1+x2)/2+nx,(y1+y2)/2+ny);
-    ctx.fillStyle=color;
-    ctx.fillText(lbl,(x1+x2)/2+nx,(y1+y2)/2+ny);
+  
+  if (lbl) {
+    ctx.save();
+    let mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const side = flipText ? -1 : 1; // Determines which side of the line the text sits
+    const nx = (-dy / len) * side, ny = (dx / len) * side;
+    mx += nx * 15; my += ny * 15;
+    
+    ctx.translate(mx, my);
+    let textAng = ang;
+    if (Math.abs(Math.cos(ang)) < 0.1) textAng = 0; 
+    else if (Math.abs(textAng) > Math.PI / 2) textAng += Math.PI;
+    
+    ctx.rotate(textAng);
+    ctx.font = 'bold 13px Inter, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(246,248,244,0.92)';
+    ctx.strokeText(lbl, 0, 0);
+    ctx.fillStyle = color; ctx.fillText(lbl, 0, 0);
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -731,25 +751,23 @@ const SFBD = {
     ctx.fillText(`${s.m} kg`,ox,oy);
     ctx.restore();
     
-    if (N > 0.5) arrow(ox-14,oy-R, ox-14,oy-R-N*sc*0.46, C.teal,`N=${N.toFixed(0)} N`);
-    arrow(ox-14,oy+R, ox-14,oy+R+W_*sc*0.46, C.gold,`mg=${W_.toFixed(0)} N`);
+    // Stagger the vectors off the edges of the box so they don't overlap each other
+    const asc = sc * 0.85; // Increase or decrease this number to adjust global arrow length
+    if (N > 0.5) arrow(ox - 14, oy - R, ox - 14, oy - R - N*asc, C.teal, `N = ${N.toFixed(0)} N`);
+    arrow(ox - 14, oy + R, ox - 14, oy + R + W_*asc, C.coral, `mg = ${W_.toFixed(0)} N`);
     
-    if(Math.abs(s.Fh)>0.5){
-      const d=s.Fh>0?1:-1;
-      arrow(ox+d*R,oy-10, ox+d*(R+Math.abs(s.Fh)*sc),oy-10, C.coral,`F=${s.Fh.toFixed(0)} N`);
+    if(Math.abs(s.Fh) > 0.5){
+      const d = s.Fh > 0 ? 1 : -1;
+      arrow(ox + d*R, oy - 10, ox + d*(R + Math.abs(s.Fh)*asc), oy - 10, C.gold, `F_h = ${Math.abs(s.Fh).toFixed(0)} N`);
     }
-    if(Math.abs(s.Fv)>0.5){
-      const d=s.Fv>0?-1:1;
-      arrow(ox+24,oy+d*R, ox+24,oy+d*(R+Math.abs(s.Fv)*sc), C.violet,`Fv=${s.Fv.toFixed(0)} N`);
+    if(Math.abs(s.Fv) > 0.5){
+      const d = s.Fv > 0 ? -1 : 1;
+      arrow(ox + 24, oy + d*R, ox + 24, oy + d*(R + Math.abs(s.Fv)*asc), C.violet, `F_v = ${Math.abs(s.Fv).toFixed(0)} N`);
     }
     
-    const netUp = s.Fv + N - W_; 
-    const nx = s.Fh, ny = -netUp;
-    const nl = Math.hypot(nx,ny);
-    
-    if(nl>1){
-      const nlen=nl*sc*0.8;
-      arrow(ox+10,oy+20, ox+10+nx/nl*nlen,oy+20+ny/nl*nlen, C.moss,`Fnet=${nl.toFixed(1)} N`,3);
+    const netUp = s.Fv + N - W_, nx = s.Fh, ny = -netUp, nl = Math.hypot(nx,ny);
+    if(nl > 1){
+      arrow(ox + 20, oy + 20, ox + 20 + nx*asc, oy + 20 + ny*asc, C.moss, `F_net = ${nl.toFixed(1)} N`, 4.5);
     }
     pill(`Fnet = √(Fh² + Fv²) = ${nl.toFixed(1)} N  →  a = ${(nl/s.m).toFixed(2)} m/s²`, getSafeRight(), 90, C.moss, 'right');
   }
@@ -885,31 +903,33 @@ const SINC = {
     ctx.fillText(`${s.m} kg`,0,0);
     ctx.restore();
     
-    // Clear, Staggered Free Body Diagram Vectors
-    const sc=2.2; // Increased scale to push arrows out
-    const nx=sinT, ny=-cosT;  // Normal direction (Up from surface)
-    const dxs=cosT, dys=sinT; // Parallel direction (Down the slope)
-    
-    // Base minimum lengths to ensure arrows always clear the block borders
-    const L_W = Math.max(55, W_*sc*0.3);
-    const L_N = Math.max(55, N_*sc*0.3);
-    const L_Wpar = Math.max(55, Wpar*sc*0.4);
-    const L_fk = Math.max(45, fk*sc*0.4);
+    const nx = sinT, ny = -cosT;  
+    const baseLen = 110;          
+    const L_W = baseLen;
+    const L_N = baseLen * cosT;
+    const L_Wpar = baseLen * sinT;
+    const L_fk = Math.min(baseLen * 0.8, (fk / (W_ || 1)) * baseLen * 2.5);
 
-    // 1. Gravity (Straight down from center)
-    arrow(bx_, by_, bx_, by_+L_W, C.gold, `mg=${W_.toFixed(1)} N`, 2);
+   // 1. Solid Gravity Vector (Text flipped to the right to avoid clashing)
+    arrow(bx_, by_, bx_, by_ + L_W, C.coral, `mg = ${W_.toFixed(0)} N`, 3.5, false, true);
     
-    // 2. Normal Force (Perpendicular up from center)
-    arrow(bx_, by_, bx_+nx*L_N, by_+ny*L_N, C.teal, `N=${N_.toFixed(1)} N`, 2);
+    // 2. Perpendicular Normal Contact Vector 
+    arrow(bx_, by_, bx_ + nx * L_N, by_ + ny * L_N, C.teal, `N = ${N_.toFixed(0)} N`);
     
-    // 3. Parallel Component of Gravity (Shifted slightly down the Y axis so it doesn't overlap)
-    const off = 14; 
-    arrow(bx_ - nx*off, by_ - ny*off, bx_ - nx*off + dxs*L_Wpar, by_ - ny*off + dys*L_Wpar, C.coral, `mg·sinθ`, 2.5);
-    
-    // 4. Kinetic Friction (Shifted slightly up the Y axis so it doesn't overlap)
-    if(fk>0.5) {
-      arrow(bx_ + nx*off, by_ + ny*off, bx_ + nx*off - dxs*L_fk, by_ + ny*off - dys*L_fk, C.violet, `f_k`, 2.5);
+    // 3. Kinetic Friction Vector 
+    if(fk > 0.1) {
+      arrow(bx_, by_, bx_ - cosT * L_fk, by_ - sinT * L_fk, C.gold, `f = ${fk.toFixed(0)} N`);
     }
+    
+    // 4. Resolved Dashed Normal Component (mg · cosθ)
+    arrow(bx_, by_, bx_ - nx * L_N, by_ - ny * L_N, C.muted, 'mg · cosθ', 2.2, true);
+    
+    // 5. Resolved Dashed Parallel Component (mg · sinθ)
+    arrow(bx_, by_, bx_ + cosT * L_Wpar, by_ + sinT * L_Wpar, C.coral, 'mg · sinθ', 2.2, true);
+    
+    // 6. Dotted Projection Completing the Triangle
+    ctx.save(); ctx.strokeStyle = C.muted; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(bx_ - nx * L_N, by_ - ny * L_N); ctx.lineTo(bx_, by_ + L_W); ctx.stroke(); ctx.restore();
     
     const net=Wpar-fk;
     pill(`Net force ∥ slope = mg sinθ − μN = ${net.toFixed(1)} N   →   a = ${(net/s.m).toFixed(2)} m/s²`, getSafeRight(), 90, net>0?C.coral:C.teal, 'right');
